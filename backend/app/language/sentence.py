@@ -8,12 +8,16 @@ def create_sentence(words):
 
 
 if __name__ == "__main__":
-    words = ["hello"]
+    # Simulated speech-to-text result
+    words = ["hello", "how", "are", "you", "today"]
 
+    # Create sentence
     sentence = create_sentence(words)
-    print("Sentence:", sentence)
+    print("Original:", sentence)
 
+    # Translate English -> Hindi
     translated = translate(sentence, "Hindi")
     print("Translated:", translated)
 
+    # Speak Hindi
     text_to_speech(translated)
