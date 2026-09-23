@@ -47,15 +47,17 @@ from backend.app.vision.isl_features import (
 
 MODEL_PATH = os.path.join(
     PROJECT_ROOT,
-    "temp_isl_model",
+    "backend",
     "models",
+    "isl",
     "isl_model.keras"
 )
 
 LABEL_PATH = os.path.join(
     PROJECT_ROOT,
-    "temp_isl_model",
+    "backend",
     "models",
+    "isl",
     "index_to_label.json"
 )
 
