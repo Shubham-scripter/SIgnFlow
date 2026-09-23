@@ -1,4 +1,4 @@
-Project: SignBridge
+Project: Sign Flow
 
 Frontend:
 React + TypeScript
