@@ -9,7 +9,7 @@ model = whisper.load_model("base")
 print("Whisper model loaded!")
 
 
-def record_audio(filename="recording.wav", duration=5, sample_rate=16000):
+def record_audio(filename="recording.wav", duration=10, sample_rate=16000):
     print("\nRecording... Speak now!")
 
     audio = sd.rec(
@@ -17,15 +17,17 @@ def record_audio(filename="recording.wav", duration=5, sample_rate=16000):
         samplerate=sample_rate,
         channels=1,
         dtype="int16",
-        device=53
+        device=1
     )
 
     sd.wait()
 
+    print("RECORDING FINISHED")
+    print("Max volume:", audio.max())
+    print("Min volume:", audio.min())
+
     write(filename, sample_rate, audio)
-
     print("Recording saved:", filename)
-
 
 def speech_to_text(audio_file="recording.wav"):
     print("Converting speech to text...")
