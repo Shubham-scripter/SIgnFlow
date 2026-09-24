@@ -1,9 +1,31 @@
 {
     "feature_count": 126,
-    "threshold": 1.1962063980102535,
+    "threshold": 2.8092052030563335,
     "rejection_margin": 1.2,
     "classes": [
+        "a",
+        "b",
+        "c",
+        "correct",
+        "d",
+        "e",
+        "hello",
+        "help",
+        "hug",
+        "i love you",
+        "meet",
+        "meow ghapghap",
+        "namaste",
+        "name",
+        "nice",
         "no",
-        "yes"
+        "pay attention",
+        "please",
+        "sorry",
+        "stop",
+        "what",
+        "where",
+        "yes",
+        "you"
     ]
 }

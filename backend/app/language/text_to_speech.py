@@ -1,55 +1,77 @@
-import subprocess
 import os
+import base64
 import winsound
+from dotenv import load_dotenv
+from google import genai
 
+load_dotenv()
 
-MODEL = os.path.join(
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_TTS_MODEL = os.getenv(
+    "GEMINI_TTS_MODEL",
+    "gemini-3.8-flash-lite-tts"
+)
+
+client = genai.Client(api_key=GEMINI_API_KEY)
+
+OUTPUT_FILE = os.path.join(
     os.path.dirname(__file__),
-    "hi_IN-pratham-medium.onnx"
+    "speech_output.wav"
 )
 
 
 def text_to_speech(text):
-    output_file = os.path.join(
-        os.path.dirname(__file__),
-        "speech_output.wav"
-    )
-
-    input_file = os.path.join(
-        os.path.dirname(__file__),
-        "tts_input.txt"
-    )
+    print("\nGenerating natural speech...")
+    print("Text:", text)
 
     try:
-        # Save text to a file
-        with open(input_file, "w", encoding="utf-8") as f:
-            f.write(text)
+        response = client.models.generate_content(
+            model=GEMINI_TTS_MODEL,
+            contents=[
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "text": text,
+                            "speech_metadata": {
+                                "style": (
+                                    "Natural, clear and friendly "
+                                    "conversational speech. "
+                                    "Speak at a comfortable pace "
+                                    "with natural pronunciation."
+                                )
+                            }
+                        }
+                    ]
+                }
+            ],
+            config={
+                "response_modalities": ["AUDIO"],
+                "speech_config": {
+                    "voice_config": {
+                        "voice": "Kore"
+                    }
+                }
+            }
+        )
 
-        # Run Piper
-        command = [
-            "py",
-            "-m",
-            "piper",
-            "-m",
-            MODEL,
-            "-i",
-            input_file,
-            "-f",
-            output_file
-        ]
+        audio_data = response.candidates[0].content.parts[0].inline_data.data
 
-        subprocess.run(command, check=True)
+        with open(OUTPUT_FILE, "wb") as f:
+            f.write(audio_data)
 
-        # Play generated speech
-        if os.path.exists(output_file):
-            winsound.PlaySound(
-                output_file,
-                winsound.SND_FILENAME
-            )
+        print("Speech generated:", OUTPUT_FILE)
+
+        winsound.PlaySound(
+            OUTPUT_FILE,
+            winsound.SND_FILENAME
+        )
 
     except Exception as e:
-        print("TTS error:", e)
+        print("Gemini TTS error:", e)
 
 
 if __name__ == "__main__":
-    text_to_speech("नमस्कार, आज आप कैसे हैं?")
+    text_to_speech(
+        "Hello, how are you today?"
+    )
