@@ -1,0 +1,9 @@
+{
+    "feature_count": 126,
+    "threshold": 1.1962063980102535,
+    "rejection_margin": 1.2,
+    "classes": [
+        "no",
+        "yes"
+    ]
+}
