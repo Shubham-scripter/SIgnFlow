@@ -21,7 +21,6 @@ QWEN_MODEL = (
 # ============================================================
 
 COMMON_PHRASES = {
-
     "you name what": {
         "english": "What is your name?"
     },
@@ -53,7 +52,6 @@ COMMON_PHRASES = {
     "what time": {
         "english": "What time is it?"
     }
-
 }
 
 
@@ -62,32 +60,39 @@ COMMON_PHRASES = {
 # ============================================================
 
 def clean_text(text):
+    """
+    Cleans the text returned by Qwen.
+
+    Removes:
+    - <think>...</think> sections
+    - markdown code fences
+    - surrounding quotation marks
+    """
 
     if not text:
         return ""
 
+    text = str(text).strip()
+
+    # Remove Qwen thinking section if present
+    if "</think>" in text:
+        text = text.split("</think>", 1)[1].strip()
+
+    # Remove markdown code fences
+    text = text.replace("```text", "")
+    text = text.replace("```", "")
+
     text = text.strip()
 
-    # Remove Qwen thinking section if present.
-    if "</think>" in text:
+    # Remove surrounding quotes
+    if (
+        len(text) >= 2
+        and text[0] == '"'
+        and text[-1] == '"'
+    ):
+        text = text[1:-1].strip()
 
-        text = text.split(
-            "</think>",
-            1
-        )[1].strip()
-
-    # Remove accidental markdown fences.
-    text = text.replace(
-        "```text",
-        ""
-    )
-
-    text = text.replace(
-        "```",
-        ""
-    )
-
-    return text.strip()
+    return text
 
 
 # ============================================================
@@ -95,132 +100,200 @@ def clean_text(text):
 # ============================================================
 
 def ask_qwen(prompt):
+    """
+    Sends a prompt to the local Qwen3 server.
+
+    Qwen is running locally through llama.cpp.
+    """
 
     payload = {
-
         "model": QWEN_MODEL,
 
         "messages": [
-
             {
                 "role": "system",
-
                 "content": (
-                    "You are the language engine "
-                    "of SignFlow, a sign-language "
-                    "translation system."
+                    "You convert recognized sign-language "
+                    "keywords into natural English sentences."
                 )
             },
 
             {
                 "role": "user",
-
                 "content": prompt
             }
-
         ],
 
         "temperature": 0.2,
 
-        "max_tokens": 100,
-
-        "stream": False
-
+        "max_tokens": 100
     }
 
-
-    data = json.dumps(
-        payload,
-        ensure_ascii=False
-    ).encode(
-        "utf-8"
-    )
-
+    data = json.dumps(payload).encode("utf-8")
 
     request = urllib.request.Request(
-
         QWEN_URL,
-
         data=data,
-
         headers={
             "Content-Type": "application/json"
         },
-
         method="POST"
-
     )
-
 
     try:
 
+        print()
+        print("================================")
+        print("[QWEN]")
+        print("Sending request to local Qwen...")
+        print("URL:", QWEN_URL)
+        print("Model:", QWEN_MODEL)
+        print("================================")
+
         with urllib.request.urlopen(
             request,
-            timeout=30
+            timeout=120
         ) as response:
 
-            result = json.loads(
-                response.read().decode(
-                    "utf-8"
-                )
+            response_data = response.read().decode(
+                "utf-8"
             )
 
+        result = json.loads(response_data)
 
-        return result[
-            "choices"
-        ][
-            0
-        ][
-            "message"
-        ][
-            "content"
-        ]
+        # OpenAI-compatible response
+        choices = result.get("choices", [])
 
+        if not choices:
+            print("[QWEN] No choices returned.")
+            print("[QWEN] Full response:")
+            print(result)
+            return ""
 
-    except urllib.error.URLError as e:
-
-        print(
-            "Qwen connection error:",
-            e
+        message = choices[0].get(
+            "message",
+            {}
         )
+
+        content = message.get(
+            "content",
+            ""
+        )
+
+        content = clean_text(content)
+
+        print()
+        print("[QWEN] Raw/cleaned result:")
+        print(repr(content))
+        print("================================")
+
+        return content
+
+    except urllib.error.HTTPError as e:
+
+        print()
+        print("================================")
+        print("[QWEN HTTP ERROR]")
+        print("Status:", e.code)
+
+        try:
+            error_body = e.read().decode(
+                "utf-8",
+                errors="replace"
+            )
+
+            print("Response:")
+            print(error_body)
+
+        except Exception:
+            pass
+
+        print("================================")
 
         return ""
 
+    except urllib.error.URLError as e:
+
+        print()
+        print("================================")
+        print("[QWEN URL ERROR]")
+        print(str(e))
+        print("Make sure llama.cpp/Qwen is running.")
+        print("================================")
+
+        return ""
+
+    except TimeoutError:
+
+        print()
+        print("================================")
+        print("[QWEN TIMEOUT]")
+        print("Qwen took too long to respond.")
+        print("================================")
+
+        return ""
 
     except Exception as e:
 
-        print(
-            "Qwen error:",
-            e
-        )
+        print()
+        print("================================")
+        print("[QWEN ERROR]")
+        print("Error type:", type(e).__name__)
+        print("Error:", str(e))
+        print("================================")
 
         return ""
 
 
 # ============================================================
-# LOCAL TRANSLATION
+# ARGOS LOCAL TRANSLATION
 # ============================================================
 
 def translate_local(
     text,
     target_language="Hindi"
 ):
+    """
+    Translates English text using local Argos Translate.
+
+    Currently configured:
+        English -> Hindi
+    """
 
     if not text:
+        print(
+            "[ARGOS] Translation skipped: "
+            "empty input."
+        )
 
         return ""
 
-
     target_language = (
-        target_language.lower()
+        str(target_language)
+        .lower()
+        .strip()
     )
 
+    print()
+    print("================================")
+    print("[ARGOS]")
+    print("Input text:")
+    print(repr(text))
+
+    print("Target language:")
+    print(repr(target_language))
+    print("================================")
 
     # --------------------------------------------------------
-    # English -> Hindi
+    # HINDI
     # --------------------------------------------------------
 
     if target_language == "hindi":
+
+        print(
+            "[ARGOS] Using "
+            "English -> Hindi"
+        )
 
         try:
 
@@ -232,25 +305,57 @@ def translate_local(
                 )
             )
 
-            return translated.strip()
+            if translated:
+                translated = translated.strip()
 
+            print()
+            print("================================")
+            print("[ARGOS RESULT]")
+            print("Input:")
+            print(repr(text))
+
+            print("Output:")
+            print(repr(translated))
+
+            print(
+                "Output type:",
+                type(translated).__name__
+            )
+
+            print("================================")
+
+            return translated
 
         except Exception as e:
 
+            print()
+            print("================================")
+            print("[ARGOS TRANSLATION ERROR]")
             print(
-                "Argos translation error:",
-                e
+                "Error type:",
+                type(e).__name__
             )
+            print(
+                "Error:",
+                str(e)
+            )
+
+            print("Input was:")
+            print(repr(text))
+
+            print("Target language:")
+            print(repr(target_language))
+
+            print("================================")
 
             return ""
 
-
     # --------------------------------------------------------
-    # Other languages
+    # OTHER LANGUAGES
     # --------------------------------------------------------
 
     print(
-        "Argos translation for "
+        f"[ARGOS] Translation for "
         f"{target_language} is not configured yet."
     )
 
@@ -258,111 +363,127 @@ def translate_local(
 
 
 # ============================================================
-# GENERATE NATURAL SENTENCE + TRANSLATION
+# GENERATE NATURAL LANGUAGE RESULT
 # ============================================================
 
 def generate_language_result(
     words,
     target_language="Hindi"
 ):
+    """
+    Converts recognized sign words into:
+
+        1. Natural English sentence
+        2. Target-language translation
+
+    Example:
+
+        ["tomorrow", "you", "come", "college"]
+
+        ↓
+
+        English:
+        "Tomorrow you will come to college."
+
+        ↓
+
+        Hindi:
+        "कल तुम कॉलेज में आएंगे।"
+    """
+
+    # --------------------------------------------------------
+    # CHECK INPUT
+    # --------------------------------------------------------
 
     if not words:
 
+        print(
+            "[LANGUAGE] No words received."
+        )
+
         return "", ""
 
-
     # --------------------------------------------------------
-    # Clean recognized words
+    # CLEAN WORDS
     # --------------------------------------------------------
 
     cleaned_words = [
-
-        word.strip().lower()
-
+        str(word).strip().lower()
         for word in words
-
-        if word and word.strip()
-
+        if word
+        and str(word).strip()
     ]
-
 
     if not cleaned_words:
 
+        print(
+            "[LANGUAGE] No valid words "
+            "after cleaning."
+        )
+
         return "", ""
 
+    # --------------------------------------------------------
+    # BUILD SIGN TEXT
+    # --------------------------------------------------------
 
     sign_text = " ".join(
         cleaned_words
     )
 
+    print()
+    print("================================")
+    print("[LANGUAGE PIPELINE]")
+    print("Recognized sign keywords:")
+    print(sign_text)
+    print("Target language:")
+    print(target_language)
+    print("================================")
 
-    # ========================================================
-    # FAST COMMON PHRASE CACHE
-    # ========================================================
+    # --------------------------------------------------------
+    # CHECK COMMON PHRASE CACHE
+    # --------------------------------------------------------
 
     if sign_text in COMMON_PHRASES:
 
         print(
-            "Using fast local phrase cache."
+            "[LANGUAGE] Using fast "
+            "local phrase cache."
         )
 
-        english = (
-            COMMON_PHRASES[
-                sign_text
-            ][
-                "english"
-            ]
-        )
+        english = COMMON_PHRASES[
+            sign_text
+        ]["english"]
 
-
-    # ========================================================
-    # QWEN SENTENCE GENERATION
-    # ========================================================
+    # --------------------------------------------------------
+    # OTHERWISE USE QWEN
+    # --------------------------------------------------------
 
     else:
 
         print(
-            "Using local Qwen3-4B..."
+            "[LANGUAGE] Using local "
+            "Qwen3-4B..."
         )
-
 
         prompt = f"""
 Convert the following recognized
 sign-language keywords into ONE natural
 English sentence.
 
-The input may use sign-language word order.
+The input consists of keywords recognized
+from Indian Sign Language.
 
-Rules:
-- Preserve the intended meaning.
-- Correct the grammar.
-- Correct unnatural word order.
-- Add only necessary grammatical words.
-- Do not invent information.
-- Do not remove important information.
-- Preserve time expressions exactly.
-- Preserve names, numbers and places.
-- Return ONLY the English sentence.
+Use the intended meaning and normal
+English grammar.
 
-Examples:
+Do not explain the conversion.
 
-YOU NAME WHAT
--> What is your name?
+Do not list the words.
 
-YOU WHERE LIVE
--> Where do you live?
+Do not give multiple alternatives.
 
-I WANT WATER
--> I want water.
-
-I NOT UNDERSTAND
--> I don't understand.
-
-YOU HELP ME
--> Can you help me?
-
-WHAT TIME
--> What time is it?
+Return ONLY one natural English sentence.
 
 Recognized sign keywords:
 
@@ -371,54 +492,121 @@ Recognized sign keywords:
 Return only the natural English sentence.
 """
 
-
-        result = ask_qwen(
-            prompt
-        )
-
+        result = ask_qwen(prompt)
 
         if not result:
 
             print(
-                "Qwen did not return a result."
+                "[LANGUAGE] Qwen did not "
+                "return a result."
             )
 
             return "", ""
 
+        english = clean_text(result)
 
-        english = clean_text(
-            result
+    # --------------------------------------------------------
+    # CHECK ENGLISH RESULT
+    # --------------------------------------------------------
+
+    if not english:
+
+        print(
+            "[LANGUAGE] Natural English "
+            "sentence is empty."
         )
 
+        return "", ""
 
-    # ========================================================
-    # LOCAL TRANSLATION
-    # ========================================================
-
+    print()
+    print("================================")
+    print("[LANGUAGE DEBUG]")
+    print("Natural English generated:")
+    print(repr(english))
     print(
-        "Using local Argos Translate ->",
-        target_language
+        "English type:",
+        type(english).__name__
     )
+    print("================================")
 
+    # ========================================================
+    # CRITICAL DEBUG POINT
+    # ========================================================
+    #
+    # This is the exact value being sent
+    # from Qwen -> Argos.
+    #
+    # ========================================================
+
+    print()
+    print("================================")
+    print("[LANGUAGE DEBUG]")
+    print("English being sent to Argos:")
+    print(repr(english))
+
+    print("Target language:")
+    print(repr(target_language))
+
+    print("================================")
+
+    # --------------------------------------------------------
+    # TRANSLATE ENGLISH -> TARGET LANGUAGE
+    # --------------------------------------------------------
 
     translated = translate_local(
         english,
         target_language
     )
 
+    # ========================================================
+    # CRITICAL DEBUG POINT #2
+    # ========================================================
+
+    print()
+    print("================================")
+    print("[LANGUAGE DEBUG]")
+    print("Argos returned:")
+    print(repr(translated))
+
+    print(
+        "Translation type:",
+        type(translated).__name__
+    )
+
+    print("================================")
+
+    # --------------------------------------------------------
+    # TRANSLATION FAILURE
+    # --------------------------------------------------------
 
     if not translated:
 
         print(
-            "Translation failed."
+            "[LANGUAGE] Translation failed."
         )
 
-        # Return English even if translation
-        # fails so the rest of SignFlow can
-        # still see the generated sentence.
+        print(
+            "[LANGUAGE] Returning English "
+            "sentence with empty translation."
+        )
 
         return english, ""
 
+    # --------------------------------------------------------
+    # FINAL RESULTS
+    # --------------------------------------------------------
+
+    print()
+    print("================================")
+    print("[LANGUAGE FINAL RESULT]")
+    print("English:")
+    print(english)
+
+    print()
+    print("Translated:")
+    print(translated)
+
+    print("================================")
 
     return english, translated
 
@@ -431,11 +619,19 @@ def translate(
     text,
     target_language="Hindi"
 ):
+    """
+    Direct translation helper.
+
+    Example:
+
+        translate(
+            "Please pay attention.",
+            "Hindi"
+        )
+    """
 
     if not text:
-
         return ""
-
 
     return translate_local(
         text,
@@ -444,20 +640,22 @@ def translate(
 
 
 # ============================================================
-# DIRECT TEST
+# STANDALONE TEST
 # ============================================================
 
 if __name__ == "__main__":
 
-    test_words = [
+    print()
+    print("================================")
+    print("SIGNFLOW TRANSLATION TEST")
+    print("================================")
 
+    test_words = [
         "tomorrow",
         "you",
         "come",
         "college"
-
     ]
-
 
     english, translated = (
         generate_language_result(
@@ -466,15 +664,14 @@ if __name__ == "__main__":
         )
     )
 
+    print()
+    print("================================")
+    print("[TEST RESULT]")
+    print("English:")
+    print(repr(english))
 
     print()
+    print("Hindi:")
+    print(repr(translated))
 
-    print(
-        "English:",
-        english
-    )
-
-    print(
-        "Translated:",
-        translated
-    )
+    print("================================")

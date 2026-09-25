@@ -1,98 +1,320 @@
+import traceback
+
+
+# ============================================================
+# IMPORT LANGUAGE MODULES
+# ============================================================
+
 try:
     from .translation import generate_language_result
     from .text_to_speech import text_to_speech
+
 except ImportError:
     from translation import generate_language_result
     from text_to_speech import text_to_speech
 
 
+# ============================================================
+# SIGNFLOW LANGUAGE PIPELINE
+# ============================================================
+
 def process_text(words, target_language="Hindi"):
 
+    # --------------------------------------------------------
+    # No words
+    # --------------------------------------------------------
+
     if not words:
-        print("No words received.")
-        return ""
+        print("[SENTENCE] No words received.")
+        return "", ""
 
     print()
-    print("=" * 50)
-    print("SIGNFLOW LANGUAGE PIPELINE")
-    print("=" * 50)
+    print("=" * 70)
+    print("SIGNFLOW LANGUAGE PIPELINE STARTED")
+    print("=" * 70)
 
-    # --------------------------------------------------------
+    # ========================================================
     # STEP 1 — RECOGNIZED SIGNS
-    # --------------------------------------------------------
+    # ========================================================
+
+    sign_text = " ".join(
+        str(word).strip()
+        for word in words
+        if word
+    )
+
+    print("[SENTENCE] Recognized signs:")
+    print("[SENTENCE]", sign_text)
+
+    print()
+    print("[SENTENCE] Target language:")
+    print("[SENTENCE]", target_language)
+
+    # ========================================================
+    # STEP 2 — QWEN + ARGOS
+    # ========================================================
+
+    print()
+    print("[SENTENCE] Calling generate_language_result()...")
+    print()
+
+    try:
+
+        english, translated = generate_language_result(
+            words,
+            target_language
+        )
+
+    except Exception as e:
+
+        print()
+        print("=" * 70)
+        print("[SENTENCE] LANGUAGE GENERATION ERROR")
+        print("=" * 70)
+
+        print(
+            "[SENTENCE] Error type:",
+            type(e).__name__
+        )
+
+        print(
+            "[SENTENCE] Error:",
+            str(e)
+        )
+
+        print()
+        print("[SENTENCE] Full traceback:")
+
+        traceback.print_exc()
+
+        print("=" * 70)
+        print()
+
+        return "", ""
+
+    # ========================================================
+    # DEBUG — CHECK RETURN VALUES
+    # ========================================================
+
+    print()
+    print("=" * 70)
+    print("[SENTENCE] LANGUAGE RESULT RECEIVED")
+    print("=" * 70)
 
     print(
-        "Recognized signs:",
-        " ".join(words)
+        "[SENTENCE] English returned:",
+        repr(english)
     )
 
-    # --------------------------------------------------------
-    # STEP 2 — LOCAL QWEN / PHRASE CACHE
-    # --------------------------------------------------------
-
-    english, translated = generate_language_result(
-        words,
-        target_language
+    print(
+        "[SENTENCE] Translation returned:",
+        repr(translated)
     )
+
+    print("=" * 70)
+
+    # ========================================================
+    # CHECK ENGLISH
+    # ========================================================
 
     if not english:
 
-        print("Could not generate sentence.")
-        return ""
+        print()
+        print(
+            "[SENTENCE] ERROR: English sentence is empty."
+        )
+
+        print(
+            "[SENTENCE] Cannot continue to TTS."
+        )
+
+        return "", ""
+
+    print()
+    print(
+        "[SENTENCE] Natural English sentence:"
+    )
 
     print(
-        "Natural sentence:",
+        "[SENTENCE]",
         english
     )
 
-    print(
-        "Translated:",
-        translated
-    )
-
-    # --------------------------------------------------------
-    # STEP 3 — TEXT TO SPEECH
-    # --------------------------------------------------------
+    # ========================================================
+    # CHECK TRANSLATION
+    # ========================================================
 
     if translated:
 
-        print("Speaking...")
+        print()
+        print(
+            "[SENTENCE] Translation:"
+        )
 
-        try:
+        print(
+            "[SENTENCE]",
+            translated
+        )
 
-            text_to_speech(
-                translated
-            )
+    else:
 
-        except Exception as e:
+        print()
+        print(
+            "[SENTENCE] WARNING: Translation is empty."
+        )
 
-            print(
-                "TTS error:",
-                e
-            )
+        print(
+            "[SENTENCE] TTS will NOT start."
+        )
 
-    print("=" * 50)
+        print(
+            "[SENTENCE] Returning English sentence only."
+        )
 
-    return translated
+        return english, ""
+
+    # ========================================================
+    # STEP 3 — TEXT TO SPEECH
+    # ========================================================
+
+    print()
+    print("=" * 70)
+    print("[SENTENCE] STARTING TTS")
+    print("=" * 70)
+
+    print(
+        "[SENTENCE] TTS function:",
+        text_to_speech
+    )
+
+    print(
+        "[SENTENCE] Text being sent to TTS:"
+    )
+
+    print(
+        "[SENTENCE]",
+        repr(translated)
+    )
+
+    print("=" * 70)
+
+    # ========================================================
+    # CALL TTS
+    # ========================================================
+
+    try:
+
+        print()
+        print(
+            "[SENTENCE] Calling text_to_speech()..."
+        )
+
+        text_to_speech(
+            translated
+        )
+
+        print()
+        print("=" * 70)
+        print("[SENTENCE] TTS COMPLETED SUCCESSFULLY")
+        print("=" * 70)
+
+    except Exception as e:
+
+        print()
+        print("=" * 70)
+        print("[SENTENCE] TTS ERROR")
+        print("=" * 70)
+
+        print(
+            "[SENTENCE] Error type:",
+            type(e).__name__
+        )
+
+        print(
+            "[SENTENCE] Error:",
+            str(e)
+        )
+
+        print()
+        print("[SENTENCE] TTS traceback:")
+
+        traceback.print_exc()
+
+        print("=" * 70)
+
+        print()
+        print(
+            "[SENTENCE] Translation is still available."
+        )
+
+    # ========================================================
+    # STEP 4 — FINAL RESULT
+    # ========================================================
+
+    print()
+    print("=" * 70)
+    print("SIGNFLOW LANGUAGE PIPELINE FINISHED")
+    print("=" * 70)
+
+    print(
+        "[SENTENCE] Final English:",
+        repr(english)
+    )
+
+    print(
+        "[SENTENCE] Final Translation:",
+        repr(translated)
+    )
+
+    print("=" * 70)
+    print()
+
+    # IMPORTANT:
+    # Return BOTH values.
+    #
+    # english     -> natural English sentence
+    # translated  -> target language
+    #
+    return english, translated
 
 
 # ============================================================
-# TEST
+# DIRECT TEST
 # ============================================================
 
 if __name__ == "__main__":
 
-    test_words = [
-    "tomorrow",
-    "you",
-    "come",
-    "college"
-]
+    print()
+    print("=" * 70)
+    print("SIGNFLOW SENTENCE.PY STANDALONE TEST")
+    print("=" * 70)
+    print()
 
-    result = process_text(
+    test_words = [
+        "tomorrow",
+        "you",
+        "come",
+        "college"
+    ]
+
+    english, translated = process_text(
         test_words,
         "Hindi"
     )
 
     print()
-    print("Final result:", result)
+    print("=" * 70)
+    print("FINAL RESULT")
+    print("=" * 70)
+
+    print(
+        "English:",
+        repr(english)
+    )
+
+    print(
+        "Hindi:",
+        repr(translated)
+    )
+
+    print("=" * 70)

@@ -25,15 +25,16 @@ class ConnectionManager:
 
         self.recognition_connection = None
 
-        # Prevent sending camera frames too quickly.
+        self.frontend_connections = []
+
         self.last_frame_time = 0.0
 
-        self.frame_interval = 0.10  # ~10 FPS
+        self.frame_interval = 0.10
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # CONNECT
-    # --------------------------------------------------------
+    # ========================================================
 
     async def connect(self, websocket):
 
@@ -45,12 +46,14 @@ class ConnectionManager:
                 websocket
             )
 
-        print("WebSocket connected.")
+        print(
+            "[BACKEND] WebSocket connected."
+        )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # DISCONNECT
-    # --------------------------------------------------------
+    # ========================================================
 
     def disconnect(self, websocket):
 
@@ -60,56 +63,99 @@ class ConnectionManager:
                 websocket
             )
 
-        if self.recognition_connection is websocket:
+        if websocket in self.frontend_connections:
+
+            self.frontend_connections.remove(
+                websocket
+            )
+
+        if (
+            self.recognition_connection
+            is websocket
+        ):
 
             self.recognition_connection = None
 
             print(
-                "Recognition client disconnected."
+                "[BACKEND] Recognition client disconnected."
             )
 
         print(
-            "WebSocket disconnected."
+            "[BACKEND] WebSocket disconnected."
         )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # REGISTER RECOGNITION
-    # --------------------------------------------------------
+    # ========================================================
 
     def register_recognition(
         self,
         websocket
     ):
 
-        # If another recognition connection exists,
-        # remove it from the active list.
+        old = self.recognition_connection
 
         if (
-            self.recognition_connection is not None
-            and
-            self.recognition_connection is not websocket
+            old is not None
+            and old is not websocket
         ):
 
-            old = self.recognition_connection
-
-            if old in self.active_connections:
-
-                self.active_connections.remove(
-                    old
-                )
-
+            print(
+                "[BACKEND] Replacing old recognition connection."
+            )
 
         self.recognition_connection = websocket
 
         print(
-            "Recognition client registered."
+            "[BACKEND] Recognition client registered."
         )
 
 
-    # --------------------------------------------------------
-    # SEND JSON
-    # --------------------------------------------------------
+    # ========================================================
+    # REGISTER FRONTEND
+    # ========================================================
+
+    def register_frontend(
+        self,
+        websocket
+    ):
+
+        if websocket not in self.frontend_connections:
+
+            self.frontend_connections.append(
+                websocket
+            )
+
+        print(
+            "[BACKEND] Frontend client registered."
+        )
+
+
+    # ========================================================
+    # ENSURE RECOGNITION
+    # ========================================================
+
+    def ensure_recognition(
+        self,
+        websocket
+    ):
+
+        if (
+            self.recognition_connection
+            is not websocket
+        ):
+
+            self.recognition_connection = websocket
+
+            print(
+                "[BACKEND] Recognition connection restored."
+            )
+
+
+    # ========================================================
+    # SAFE JSON
+    # ========================================================
 
     async def safe_send_json(
         self,
@@ -127,9 +173,6 @@ class ConnectionManager:
 
         except Exception:
 
-            # Do NOT print repeatedly.
-            # Just remove the dead connection.
-
             self.disconnect(
                 websocket
             )
@@ -137,9 +180,9 @@ class ConnectionManager:
             return False
 
 
-    # --------------------------------------------------------
-    # SEND BYTES
-    # --------------------------------------------------------
+    # ========================================================
+    # SAFE BYTES
+    # ========================================================
 
     async def safe_send_bytes(
         self,
@@ -157,7 +200,6 @@ class ConnectionManager:
 
         except Exception:
 
-            # Remove dead frontend connection.
             self.disconnect(
                 websocket
             )
@@ -165,9 +207,9 @@ class ConnectionManager:
             return False
 
 
-    # --------------------------------------------------------
-    # BROADCAST JSON
-    # --------------------------------------------------------
+    # ========================================================
+    # BROADCAST JSON TO FRONTENDS
+    # ========================================================
 
     async def broadcast_json(
         self,
@@ -175,17 +217,10 @@ class ConnectionManager:
     ):
 
         connections = list(
-            self.active_connections
+            self.frontend_connections
         )
 
         for websocket in connections:
-
-            # Never send recognition messages
-            # back to recognition.
-
-            if websocket is self.recognition_connection:
-
-                continue
 
             await self.safe_send_json(
                 websocket,
@@ -193,9 +228,9 @@ class ConnectionManager:
             )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # BROADCAST CAMERA FRAME
-    # --------------------------------------------------------
+    # ========================================================
 
     async def broadcast_frame(
         self,
@@ -204,29 +239,23 @@ class ConnectionManager:
 
         current_time = time.monotonic()
 
-        # Limit camera forwarding to ~10 FPS.
-
         if (
             current_time
-            - self.last_frame_time
-            < self.frame_interval
+            -
+            self.last_frame_time
+            <
+            self.frame_interval
         ):
 
             return
 
         self.last_frame_time = current_time
 
-
         connections = list(
-            self.active_connections
+            self.frontend_connections
         )
 
-
         for websocket in connections:
-
-            if websocket is self.recognition_connection:
-
-                continue
 
             await self.safe_send_bytes(
                 websocket,
@@ -234,9 +263,9 @@ class ConnectionManager:
             )
 
 
-    # --------------------------------------------------------
-    # SEND CONTROL TO RECOGNITION
-    # --------------------------------------------------------
+    # ========================================================
+    # SEND CONTROL
+    # ========================================================
 
     async def send_control(
         self,
@@ -247,37 +276,36 @@ class ConnectionManager:
             self.recognition_connection
         )
 
-
         if websocket is None:
 
             print(
-                "Recognition client is not connected."
+                "[BACKEND] Recognition client is not connected."
             )
 
             return False
 
-
         try:
 
-            await websocket.send(
+            await websocket.send_text(
                 json.dumps({
-
                     "type": "control",
-
                     "action": action
-
                 })
             )
 
             print(
-                "Control sent to recognition:",
+                "[BACKEND] Control sent to recognition:",
                 action
             )
 
             return True
 
+        except Exception as e:
 
-        except Exception:
+            print(
+                "[BACKEND] Failed to send control:",
+                e
+            )
 
             self.disconnect(
                 websocket
@@ -297,13 +325,9 @@ manager = ConnectionManager()
 async def root():
 
     return {
-
         "name": "SignFlow Backend",
-
         "status": "running",
-
         "websocket": "/ws"
-
     }
 
 
@@ -315,9 +339,7 @@ async def root():
 async def health():
 
     return {
-
         "status": "ok"
-
     }
 
 
@@ -334,15 +356,13 @@ async def websocket_endpoint(
         websocket
     )
 
-
-    client_role = "frontend"
-
+    client_role = "unknown"
 
     try:
 
-        # ----------------------------------------------------
-        # CONNECTION MESSAGE
-        # ----------------------------------------------------
+        # ====================================================
+        # INITIAL CONNECTION
+        # ====================================================
 
         await websocket.send_json({
 
@@ -350,16 +370,15 @@ async def websocket_endpoint(
 
             "status": "connected",
 
-            "message": (
+            "message":
                 "Connected to SignFlow backend"
-            )
 
         })
 
 
-        # ----------------------------------------------------
+        # ====================================================
         # MAIN LOOP
-        # ----------------------------------------------------
+        # ====================================================
 
         while True:
 
@@ -372,33 +391,34 @@ async def websocket_endpoint(
 
             if (
                 message.get("type")
-                == "websocket.disconnect"
+                ==
+                "websocket.disconnect"
             ):
 
                 break
 
 
             # =================================================
-            # BINARY CAMERA FRAME
+            # BINARY
             # =================================================
 
             if message.get("bytes") is not None:
 
                 frame = message["bytes"]
 
-
-                # Only recognition is allowed
-                # to send camera frames.
-
                 if (
-                    websocket
-                    is manager.recognition_connection
+                    client_role
+                    ==
+                    "recognition"
                 ):
+
+                    manager.ensure_recognition(
+                        websocket
+                    )
 
                     await manager.broadcast_frame(
                         frame
                     )
-
 
                 continue
 
@@ -410,7 +430,6 @@ async def websocket_endpoint(
             text = message.get(
                 "text"
             )
-
 
             if text is None:
 
@@ -430,13 +449,9 @@ async def websocket_endpoint(
                     websocket,
 
                     {
-
                         "type": "error",
-
-                        "message": (
+                        "message":
                             "Invalid JSON message"
-                        )
-
                     }
 
                 )
@@ -462,9 +477,9 @@ async def websocket_endpoint(
 
                 client_role = role
 
-
                 print(
-                    f"Client registered as: {role}"
+                    "[BACKEND] Client registered as:",
+                    role
                 )
 
 
@@ -474,37 +489,43 @@ async def websocket_endpoint(
                         websocket
                     )
 
-
                     await manager.safe_send_json(
 
                         websocket,
 
                         {
+                            "type":
+                                "registration",
 
-                            "type": "registration",
+                            "role":
+                                "recognition",
 
-                            "role": "recognition",
-
-                            "status": "registered"
-
+                            "status":
+                                "registered"
                         }
 
                     )
 
+
                 else:
+
+                    manager.register_frontend(
+                        websocket
+                    )
 
                     await manager.safe_send_json(
 
                         websocket,
 
                         {
+                            "type":
+                                "registration",
 
-                            "type": "registration",
+                            "role":
+                                "frontend",
 
-                            "role": role,
-
-                            "status": "registered"
-
+                            "status":
+                                "registered"
                         }
 
                     )
@@ -523,13 +544,9 @@ async def websocket_endpoint(
                     websocket,
 
                     {
-
                         "type": "pong",
-
-                        "message": (
+                        "message":
                             "SignFlow backend is working"
-                        )
-
                     }
 
                 )
@@ -538,7 +555,7 @@ async def websocket_endpoint(
 
 
             # =================================================
-            # FRONTEND CONTROL
+            # CONTROL
             # =================================================
 
             if message_type == "control":
@@ -547,17 +564,11 @@ async def websocket_endpoint(
                     "action"
                 )
 
-
                 allowed_actions = {
-
                     "enter",
-
                     "backspace",
-
                     "clear",
-
                     "quit"
-
                 }
 
 
@@ -568,13 +579,11 @@ async def websocket_endpoint(
                         websocket,
 
                         {
+                            "type":
+                                "error",
 
-                            "type": "error",
-
-                            "message": (
+                            "message":
                                 "Unknown control action"
-                            )
-
                         }
 
                     )
@@ -583,7 +592,7 @@ async def websocket_endpoint(
 
 
                 print(
-                    "Frontend control:",
+                    "[BACKEND] Frontend control:",
                     action
                 )
 
@@ -602,14 +611,11 @@ async def websocket_endpoint(
                         websocket,
 
                         {
+                            "type":
+                                "error",
 
-                            "type": "error",
-
-                            "message": (
-                                "Recognition client "
-                                "is not connected"
-                            )
-
+                            "message":
+                                "Recognition client is not connected"
                         }
 
                     )
@@ -623,21 +629,31 @@ async def websocket_endpoint(
 
             if message_type == "sign":
 
+                if client_role == "recognition":
+
+                    manager.ensure_recognition(
+                        websocket
+                    )
+
                 await manager.broadcast_json({
 
-                    "type": "recognition",
+                    "type":
+                        "recognition",
 
-                    "sign": data.get(
-                        "sign",
-                        ""
-                    ),
+                    "sign":
+                        data.get(
+                            "sign",
+                            ""
+                        ),
 
-                    "sentence": data.get(
-                        "sentence",
-                        ""
-                    ),
+                    "sentence":
+                        data.get(
+                            "sentence",
+                            ""
+                        ),
 
-                    "status": "recognizing"
+                    "status":
+                        "recognizing"
 
                 })
 
@@ -648,26 +664,40 @@ async def websocket_endpoint(
             # LIVE RECOGNITION
             # =================================================
 
-            if message_type == "recognition_live":
+            if (
+                message_type
+                ==
+                "recognition_live"
+            ):
+
+                if client_role == "recognition":
+
+                    manager.ensure_recognition(
+                        websocket
+                    )
 
                 await manager.broadcast_json({
 
-                    "type": "recognition_live",
+                    "type":
+                        "recognition_live",
 
-                    "sign": data.get(
-                        "sign",
-                        ""
-                    ),
+                    "sign":
+                        data.get(
+                            "sign",
+                            ""
+                        ),
 
-                    "distance": data.get(
-                        "distance",
-                        0
-                    ),
+                    "distance":
+                        data.get(
+                            "distance",
+                            0
+                        ),
 
-                    "sentence": data.get(
-                        "sentence",
-                        ""
-                    )
+                    "sentence":
+                        data.get(
+                            "sentence",
+                            ""
+                        )
 
                 })
 
@@ -678,16 +708,28 @@ async def websocket_endpoint(
             # SENTENCE STATE
             # =================================================
 
-            if message_type == "sentence_state":
+            if (
+                message_type
+                ==
+                "sentence_state"
+            ):
+
+                if client_role == "recognition":
+
+                    manager.ensure_recognition(
+                        websocket
+                    )
 
                 await manager.broadcast_json({
 
-                    "type": "sentence_state",
+                    "type":
+                        "sentence_state",
 
-                    "sentence": data.get(
-                        "sentence",
-                        ""
-                    )
+                    "sentence":
+                        data.get(
+                            "sentence",
+                            ""
+                        )
 
                 })
 
@@ -703,6 +745,12 @@ async def websocket_endpoint(
                 "sentence"
             ):
 
+                if client_role == "recognition":
+
+                    manager.ensure_recognition(
+                        websocket
+                    )
+
                 sentence = data.get(
                     "sentence",
                     ""
@@ -716,35 +764,38 @@ async def websocket_endpoint(
 
                 print()
                 print(
-                    "=" * 50
+                    "================================"
                 )
 
                 print(
-                    "FINAL SENTENCE"
+                    "[BACKEND] FINAL SENTENCE"
                 )
 
                 print(
-                    "English:",
+                    "[BACKEND] English:",
                     sentence
                 )
 
                 print(
-                    "Translation:",
+                    "[BACKEND] Translation:",
                     translation
                 )
 
                 print(
-                    "=" * 50
+                    "================================"
                 )
 
 
                 await manager.broadcast_json({
 
-                    "type": "sentence_result",
+                    "type":
+                        "sentence_result",
 
-                    "sentence": sentence,
+                    "sentence":
+                        sentence,
 
-                    "translation": translation
+                    "translation":
+                        translation
 
                 })
 
@@ -759,12 +810,14 @@ async def websocket_endpoint(
 
                 await manager.broadcast_json({
 
-                    "type": "error",
+                    "type":
+                        "error",
 
-                    "message": data.get(
-                        "message",
-                        "Unknown error"
-                    )
+                    "message":
+                        data.get(
+                            "message",
+                            "Unknown error"
+                        )
 
                 })
 
@@ -772,7 +825,7 @@ async def websocket_endpoint(
 
 
             # =================================================
-            # UNKNOWN MESSAGE
+            # UNKNOWN
             # =================================================
 
             await manager.safe_send_json(
@@ -780,14 +833,12 @@ async def websocket_endpoint(
                 websocket,
 
                 {
+                    "type":
+                        "error",
 
-                    "type": "error",
-
-                    "message": (
+                    "message":
                         "Unknown message type: "
                         f"{message_type}"
-                    )
-
                 }
 
             )
@@ -796,14 +847,14 @@ async def websocket_endpoint(
     except WebSocketDisconnect:
 
         print(
-            f"{client_role} WebSocket disconnected."
+            f"[BACKEND] {client_role} WebSocket disconnected."
         )
 
 
     except Exception as e:
 
         print(
-            f"{client_role} WebSocket error:",
+            f"[BACKEND] {client_role} WebSocket error:",
             e
         )
 

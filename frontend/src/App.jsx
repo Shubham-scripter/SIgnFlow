@@ -25,8 +25,19 @@ function App() {
     const ws = socketRef.current;
 
     if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.warn(
+        "[FRONTEND] Cannot send control. Backend not connected."
+      );
+
+      setStatus("Backend disconnected");
+
       return;
     }
+
+    console.log(
+      "[FRONTEND] Sending control:",
+      action
+    );
 
     ws.send(
       JSON.stringify({
@@ -41,6 +52,11 @@ function App() {
   // ============================================================
 
   useEffect(() => {
+    console.log(
+      "[FRONTEND] Connecting to:",
+      WS_URL
+    );
+
     const ws = new WebSocket(WS_URL);
 
     ws.binaryType = "arraybuffer";
@@ -52,6 +68,10 @@ function App() {
     // ----------------------------------------------------------
 
     ws.onopen = () => {
+      console.log(
+        "[FRONTEND] WebSocket connected"
+      );
+
       setConnected(true);
       setStatus("AI camera connected");
 
@@ -61,6 +81,10 @@ function App() {
           role: "frontend",
         })
       );
+
+      console.log(
+        "[FRONTEND] Registered as frontend"
+      );
     };
 
     // ----------------------------------------------------------
@@ -68,18 +92,25 @@ function App() {
     // ----------------------------------------------------------
 
     ws.onmessage = (event) => {
+
       // ========================================================
       // CAMERA FRAME
       // ========================================================
 
       if (event.data instanceof ArrayBuffer) {
-        const blob = new Blob([event.data], {
-          type: "image/jpeg",
-        });
 
-        const newUrl = URL.createObjectURL(blob);
+        const blob = new Blob(
+          [event.data],
+          {
+            type: "image/jpeg",
+          }
+        );
 
-        const oldUrl = frameUrlRef.current;
+        const newUrl =
+          URL.createObjectURL(blob);
+
+        const oldUrl =
+          frameUrlRef.current;
 
         frameUrlRef.current = newUrl;
 
@@ -97,14 +128,25 @@ function App() {
       // ========================================================
 
       try {
-        const data = JSON.parse(event.data);
+
+        const data =
+          JSON.parse(event.data);
+
+        console.log(
+          "[FRONTEND] Received:",
+          data.type,
+          data
+        );
 
         // ------------------------------------------------------
         // CONNECTION
         // ------------------------------------------------------
 
         if (data.type === "connection") {
-          setStatus("AI camera connected");
+
+          setStatus(
+            "AI camera connected"
+          );
         }
 
         // ------------------------------------------------------
@@ -112,52 +154,122 @@ function App() {
         // ------------------------------------------------------
 
         if (data.type === "recognition") {
+
           if (data.sign) {
+
             setRecognizedSign(
-              data.sign.toUpperCase()
+              String(data.sign).toUpperCase()
             );
           }
 
-          setSentence(
-            data.sentence ?? ""
-          );
+          /*
+           * Keep this for compatibility with
+           * the backend's older recognition message.
+           *
+           * If a sentence is actually supplied,
+           * update it.
+           */
 
-          setStatus("Recognizing");
+          if (
+            data.sentence !== undefined
+          ) {
+
+            setSentence(
+              data.sentence ?? ""
+            );
+          }
+
+          setStatus(
+            "Recognizing"
+          );
         }
 
         // ------------------------------------------------------
         // LIVE RECOGNITION
         // ------------------------------------------------------
 
-        if (data.type === "recognition_live") {
+        if (
+          data.type === "recognition_live"
+        ) {
+
           if (data.sign) {
+
             setRecognizedSign(
-              data.sign.toUpperCase()
+              String(data.sign).toUpperCase()
             );
           }
 
-          setSentence(
-            data.sentence ?? ""
-          );
+          /*
+           * IMPORTANT
+           *
+           * DO NOT update sentence here.
+           *
+           * recognition_live is continuously
+           * sent while the camera is recognizing.
+           *
+           * Updating sentence here would overwrite
+           * the final Qwen-generated sentence.
+           */
 
-          setStatus("Recognizing");
+          setStatus(
+            "Recognizing"
+          );
         }
 
         // ------------------------------------------------------
         // SENTENCE STATE
         // ------------------------------------------------------
 
-        if (data.type === "sentence_state") {
+        if (
+          data.type === "sentence_state"
+        ) {
+
           setSentence(
             data.sentence ?? ""
           );
+
+          /*
+           * Some backend versions may include
+           * translation in sentence_state.
+           */
+
+          if (
+            data.translation !== undefined
+          ) {
+
+            setTranslation(
+              data.translation ?? ""
+            );
+          }
         }
 
         // ------------------------------------------------------
-        // FINAL SENTENCE
+        // FINAL SENTENCE RESULT
         // ------------------------------------------------------
 
-        if (data.type === "sentence_result") {
+        if (
+          data.type === "sentence_result"
+        ) {
+
+          console.log(
+            "[FRONTEND] Final sentence received."
+          );
+
+          console.log(
+            "[FRONTEND] English:",
+            data.sentence
+          );
+
+          console.log(
+            "[FRONTEND] Translation:",
+            data.translation
+          );
+
+          /*
+           * THIS is where the final Qwen sentence
+           * must update the UI.
+           */
+
           setSentence(
             data.sentence ?? ""
           );
@@ -166,25 +278,51 @@ function App() {
             data.translation ?? ""
           );
 
-          setStatus("Translation ready");
+          setStatus(
+            "Translation ready"
+          );
+        }
+
+        // ------------------------------------------------------
+        // SIGN
+        // ------------------------------------------------------
+
+        if (
+          data.type === "sign"
+        ) {
+
+          if (data.sign) {
+
+            setRecognizedSign(
+              String(data.sign).toUpperCase()
+            );
+          }
         }
 
         // ------------------------------------------------------
         // ERROR
         // ------------------------------------------------------
 
-        if (data.type === "error") {
+        if (
+          data.type === "error"
+        ) {
+
           setStatus(
-            data.message || "Backend error"
+            data.message ||
+            "Backend error"
           );
 
           console.error(
-            data.details || data.message
+            "[FRONTEND] Backend error:",
+            data.details ||
+            data.message
           );
         }
+
       } catch (error) {
+
         console.error(
-          "Invalid WebSocket message:",
+          "[FRONTEND] Invalid WebSocket message:",
           error
         );
       }
@@ -195,17 +333,34 @@ function App() {
     // ----------------------------------------------------------
 
     ws.onclose = () => {
+
+      console.log(
+        "[FRONTEND] WebSocket disconnected"
+      );
+
       setConnected(false);
-      setStatus("Backend disconnected");
+
+      setStatus(
+        "Backend disconnected"
+      );
     };
 
     // ----------------------------------------------------------
     // ERROR
     // ----------------------------------------------------------
 
-    ws.onerror = () => {
+    ws.onerror = (error) => {
+
+      console.error(
+        "[FRONTEND] WebSocket error:",
+        error
+      );
+
       setConnected(false);
-      setStatus("Connection error");
+
+      setStatus(
+        "Connection error"
+      );
     };
 
     // ----------------------------------------------------------
@@ -213,9 +368,11 @@ function App() {
     // ----------------------------------------------------------
 
     return () => {
+
       ws.close();
 
       if (frameUrlRef.current) {
+
         URL.revokeObjectURL(
           frameUrlRef.current
         );
@@ -223,6 +380,7 @@ function App() {
         frameUrlRef.current = null;
       }
     };
+
   }, []);
 
   // ============================================================
@@ -230,8 +388,11 @@ function App() {
   // ============================================================
 
   useEffect(() => {
+
     const handleKeyDown = (event) => {
-      const tag = event.target?.tagName;
+
+      const tag =
+        event.target?.tagName;
 
       if (
         tag === "INPUT" ||
@@ -241,22 +402,51 @@ function App() {
         return;
       }
 
+      // --------------------------------------------------------
+      // ENTER
+      // --------------------------------------------------------
+
       if (event.key === "Enter") {
+
         event.preventDefault();
+
+        console.log(
+          "[FRONTEND] Keyboard: Enter"
+        );
 
         sendControl("enter");
       }
 
-      else if (event.key === "Backspace") {
+      // --------------------------------------------------------
+      // BACKSPACE
+      // --------------------------------------------------------
+
+      else if (
+        event.key === "Backspace"
+      ) {
+
         event.preventDefault();
+
+        console.log(
+          "[FRONTEND] Keyboard: Backspace"
+        );
 
         sendControl("backspace");
       }
 
+      // --------------------------------------------------------
+      // C = CLEAR
+      // --------------------------------------------------------
+
       else if (
         event.key.toLowerCase() === "c"
       ) {
+
         event.preventDefault();
+
+        console.log(
+          "[FRONTEND] Keyboard: Clear"
+        );
 
         sendControl("clear");
       }
@@ -268,11 +458,13 @@ function App() {
     );
 
     return () => {
+
       window.removeEventListener(
         "keydown",
         handleKeyDown
       );
     };
+
   }, []);
 
   // ============================================================
@@ -280,16 +472,61 @@ function App() {
   // ============================================================
 
   const clearInterface = () => {
+
+    console.log(
+      "[FRONTEND] Clearing interface"
+    );
+
     sendControl("clear");
 
     setSentence("");
+
     setTranslation("");
-    setRecognizedSign("Waiting...");
+
+    setRecognizedSign(
+      "Waiting..."
+    );
+
     setStatus(
       connected
         ? "Ready"
         : "Backend disconnected"
     );
+  };
+
+  // ============================================================
+  // LANGUAGE CHANGE
+  // ============================================================
+
+  const handleLanguageChange = (
+    event
+  ) => {
+
+    const language =
+      event.target.value;
+
+    setTargetLanguage(
+      language
+    );
+
+    console.log(
+      "[FRONTEND] Target language selected:",
+      language
+    );
+
+    /*
+     * IMPORTANT:
+     *
+     * The current backend pipeline is configured
+     * with TARGET_LANGUAGE = "Hindi".
+     *
+     * Therefore this selector currently changes
+     * the frontend display only.
+     *
+     * We are NOT pretending that English,
+     * Spanish, or French are already implemented
+     * in the backend.
+     */
   };
 
   // ============================================================
@@ -313,7 +550,9 @@ function App() {
 
           <div className="brand-text">
 
-            <h1>SignFlow</h1>
+            <h1>
+              SignFlow
+            </h1>
 
             <p>
               Real-time sign language communication
@@ -333,12 +572,11 @@ function App() {
 
             <select
               value={targetLanguage}
-              onChange={(event) =>
-                setTargetLanguage(
-                  event.target.value
-                )
+              onChange={
+                handleLanguageChange
               }
             >
+
               <option value="Hindi">
                 Hindi
               </option>
@@ -354,6 +592,7 @@ function App() {
               <option value="French">
                 French
               </option>
+
             </select>
 
           </div>
@@ -433,9 +672,11 @@ function App() {
               <div className="camera-empty">
 
                 <div className="camera-empty-icon">
+
                   <span />
                   <span />
                   <span />
+
                 </div>
 
                 <h3>
@@ -455,10 +696,21 @@ function App() {
 
             <div className="camera-overlay">
 
-              <div className="corner top-left" />
-              <div className="corner top-right" />
-              <div className="corner bottom-left" />
-              <div className="corner bottom-right" />
+              <div
+                className="corner top-left"
+              />
+
+              <div
+                className="corner top-right"
+              />
+
+              <div
+                className="corner bottom-left"
+              />
+
+              <div
+                className="corner bottom-right"
+              />
 
             </div>
 
@@ -560,8 +812,10 @@ function App() {
                   : "sentence-value empty"
               }
             >
+
               {sentence ||
                 "Your recognized signs will appear here..."}
+
             </div>
 
           </div>
@@ -652,8 +906,10 @@ function App() {
                     : "translation-main muted"
                 }
               >
+
                 {sentence ||
                   "Waiting for a completed sentence..."}
+
               </div>
 
             </div>
@@ -685,8 +941,10 @@ function App() {
                     : "translation-main muted"
                 }
               >
+
                 {translation ||
                   "Translation will appear here..."}
+
               </div>
 
             </div>
@@ -708,11 +966,13 @@ function App() {
                   sendControl("enter")
                 }
               >
+
                 <span className="speaker-icon">
                   ♪
                 </span>
 
                 Play speech
+
               </button>
 
             )}
@@ -748,6 +1008,8 @@ function App() {
 
           <div className="controls-buttons">
 
+            {/* UNDO */}
+
             <button
               className="control-button secondary"
               onClick={() =>
@@ -774,9 +1036,13 @@ function App() {
             </button>
 
 
+            {/* CLEAR */}
+
             <button
               className="control-button secondary"
-              onClick={clearInterface}
+              onClick={
+                clearInterface
+              }
             >
 
               <span className="button-icon">
@@ -797,6 +1063,8 @@ function App() {
 
             </button>
 
+
+            {/* FINISH */}
 
             <button
               className="control-button primary"
@@ -823,6 +1091,8 @@ function App() {
 
             </button>
 
+
+            {/* STOP */}
 
             <button
               className="control-button danger"
@@ -863,6 +1133,7 @@ function App() {
       <footer className="app-footer">
 
         <div>
+
           <strong>
             SignFlow
           </strong>
@@ -870,6 +1141,7 @@ function App() {
           <span>
             AI-powered sign language communication
           </span>
+
         </div>
 
         <div className="keyboard-hints">
