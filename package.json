@@ -5,7 +5,7 @@
   "scripts": {
     "frontend": "npm --prefix frontend run dev",
     "backend": "py -3.10 -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000",
-    "recognition": "py -3.10 backend/app/recognition/realtime_sentence.py",
+    "recognition": "py -3.10 -m backend.app.recognition.realtime_sentence",
     "dev": "concurrently --kill-others-on-fail --names FRONTEND,BACKEND,AI \"npm run frontend\" \"npm run backend\" \"npm run recognition\""
   },
   "devDependencies": {

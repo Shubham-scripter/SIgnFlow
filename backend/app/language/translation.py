@@ -61,10 +61,10 @@ COMMON_PHRASES = {
 
 def clean_text(text):
     """
-    Cleans the text returned by Qwen.
+    Cleans text returned by Qwen.
 
     Removes:
-    - <think>...</think> sections
+    - <think>...</think>
     - markdown code fences
     - surrounding quotation marks
     """
@@ -74,17 +74,14 @@ def clean_text(text):
 
     text = str(text).strip()
 
-    # Remove Qwen thinking section if present
     if "</think>" in text:
         text = text.split("</think>", 1)[1].strip()
 
-    # Remove markdown code fences
     text = text.replace("```text", "")
     text = text.replace("```", "")
 
     text = text.strip()
 
-    # Remove surrounding quotes
     if (
         len(text) >= 2
         and text[0] == '"'
@@ -101,9 +98,7 @@ def clean_text(text):
 
 def ask_qwen(prompt):
     """
-    Sends a prompt to the local Qwen3 server.
-
-    Qwen is running locally through llama.cpp.
+    Sends a request to the local Qwen3 server.
     """
 
     payload = {
@@ -125,7 +120,6 @@ def ask_qwen(prompt):
         ],
 
         "temperature": 0.2,
-
         "max_tokens": 100
     }
 
@@ -161,13 +155,14 @@ def ask_qwen(prompt):
 
         result = json.loads(response_data)
 
-        # OpenAI-compatible response
         choices = result.get("choices", [])
 
         if not choices:
+
             print("[QWEN] No choices returned.")
             print("[QWEN] Full response:")
             print(result)
+
             return ""
 
         message = choices[0].get(
@@ -183,7 +178,7 @@ def ask_qwen(prompt):
         content = clean_text(content)
 
         print()
-        print("[QWEN] Raw/cleaned result:")
+        print("[QWEN] Result:")
         print(repr(content))
         print("================================")
 
@@ -197,6 +192,7 @@ def ask_qwen(prompt):
         print("Status:", e.code)
 
         try:
+
             error_body = e.read().decode(
                 "utf-8",
                 errors="replace"
@@ -246,6 +242,138 @@ def ask_qwen(prompt):
 
 
 # ============================================================
+# ARGOS — GET TRANSLATION OBJECT
+# ============================================================
+
+def get_argos_translation(
+    source_language="en",
+    target_language="hi"
+):
+    """
+    Finds the installed Argos translation package.
+
+    Returns:
+        Argos Translation object
+        or None if unavailable.
+    """
+
+    try:
+
+        source_language = source_language.lower().strip()
+        target_language = target_language.lower().strip()
+
+        print()
+        print("================================")
+        print("[ARGOS] Looking for translation")
+        print(
+            f"{source_language} -> {target_language}"
+        )
+        print("================================")
+
+        # Get installed languages
+        languages = (
+            argostranslate.translate
+            .get_installed_languages()
+        )
+
+        print(
+            "[ARGOS] Installed languages:"
+        )
+
+        for language in languages:
+
+            print(
+                f"  {language.name} "
+                f"({language.code})"
+            )
+
+        # ----------------------------------------------------
+        # Find source and target language objects
+        # ----------------------------------------------------
+
+        source = None
+        target = None
+
+        for language in languages:
+
+            if language.code == source_language:
+                source = language
+
+            if language.code == target_language:
+                target = language
+
+        if source is None:
+
+            print(
+                f"[ARGOS] Source language "
+                f"'{source_language}' not found."
+            )
+
+            return None
+
+        if target is None:
+
+            print(
+                f"[ARGOS] Target language "
+                f"'{target_language}' not found."
+            )
+
+            return None
+
+        print(
+            "[ARGOS] Source:",
+            source.name,
+            source.code
+        )
+
+        print(
+            "[ARGOS] Target:",
+            target.name,
+            target.code
+        )
+
+        # ----------------------------------------------------
+        # Get translation package
+        # ----------------------------------------------------
+
+        translation = source.get_translation(
+            target
+        )
+
+        if translation is None:
+
+            print(
+                "[ARGOS] No direct translation "
+                "package found."
+            )
+
+            return None
+
+        print(
+            "[ARGOS] Translation package found."
+        )
+
+        return translation
+
+    except Exception as e:
+
+        print()
+        print("================================")
+        print("[ARGOS PACKAGE ERROR]")
+        print(
+            "Error type:",
+            type(e).__name__
+        )
+        print(
+            "Error:",
+            str(e)
+        )
+        print("================================")
+
+        return None
+
+
+# ============================================================
 # ARGOS LOCAL TRANSLATION
 # ============================================================
 
@@ -254,19 +382,23 @@ def translate_local(
     target_language="Hindi"
 ):
     """
-    Translates English text using local Argos Translate.
+    Performs completely local translation.
 
-    Currently configured:
+    Currently supported:
+
         English -> Hindi
     """
 
     if not text:
+
         print(
             "[ARGOS] Translation skipped: "
             "empty input."
         )
 
         return ""
+
+    text = str(text).strip()
 
     target_language = (
         str(target_language)
@@ -277,36 +409,61 @@ def translate_local(
     print()
     print("================================")
     print("[ARGOS]")
-    print("Input text:")
+    print("Input:")
     print(repr(text))
 
-    print("Target language:")
+    print("Target:")
     print(repr(target_language))
+
     print("================================")
 
-    # --------------------------------------------------------
+    # ========================================================
     # HINDI
-    # --------------------------------------------------------
+    # ========================================================
 
     if target_language == "hindi":
 
         print(
-            "[ARGOS] Using "
-            "English -> Hindi"
+            "[ARGOS] Using English -> Hindi"
         )
 
         try:
 
-            translated = (
-                argostranslate.translate.translate(
-                    text,
-                    "en",
-                    "hi"
+            # ------------------------------------------------
+            # Explicitly obtain English -> Hindi model
+            # ------------------------------------------------
+
+            translation = get_argos_translation(
+                "en",
+                "hi"
+            )
+
+            if translation is None:
+
+                print(
+                    "[ARGOS] English -> Hindi "
+                    "translation object unavailable."
                 )
+
+                return ""
+
+            # ------------------------------------------------
+            # Perform translation
+            # ------------------------------------------------
+
+            translated = translation.translate(
+                text
             )
 
             if translated:
-                translated = translated.strip()
+
+                translated = str(
+                    translated
+                ).strip()
+
+            else:
+
+                translated = ""
 
             print()
             print("================================")
@@ -335,24 +492,25 @@ def translate_local(
                 "Error type:",
                 type(e).__name__
             )
+
             print(
                 "Error:",
                 str(e)
             )
 
-            print("Input was:")
+            print("Input:")
             print(repr(text))
 
-            print("Target language:")
+            print("Target:")
             print(repr(target_language))
 
             print("================================")
 
             return ""
 
-    # --------------------------------------------------------
+    # ========================================================
     # OTHER LANGUAGES
-    # --------------------------------------------------------
+    # ========================================================
 
     print(
         f"[ARGOS] Translation for "
@@ -371,24 +529,10 @@ def generate_language_result(
     target_language="Hindi"
 ):
     """
-    Converts recognized sign words into:
+    Converts recognized sign keywords into:
 
         1. Natural English sentence
         2. Target-language translation
-
-    Example:
-
-        ["tomorrow", "you", "come", "college"]
-
-        ↓
-
-        English:
-        "Tomorrow you will come to college."
-
-        ↓
-
-        Hindi:
-        "कल तुम कॉलेज में आएंगे।"
     """
 
     # --------------------------------------------------------
@@ -436,13 +580,15 @@ def generate_language_result(
     print("[LANGUAGE PIPELINE]")
     print("Recognized sign keywords:")
     print(sign_text)
+
     print("Target language:")
     print(target_language)
+
     print("================================")
 
-    # --------------------------------------------------------
-    # CHECK COMMON PHRASE CACHE
-    # --------------------------------------------------------
+    # ========================================================
+    # COMMON PHRASE CACHE
+    # ========================================================
 
     if sign_text in COMMON_PHRASES:
 
@@ -455,9 +601,9 @@ def generate_language_result(
             sign_text
         ]["english"]
 
-    # --------------------------------------------------------
-    # OTHERWISE USE QWEN
-    # --------------------------------------------------------
+    # ========================================================
+    # QWEN
+    # ========================================================
 
     else:
 
@@ -506,7 +652,7 @@ Return only the natural English sentence.
         english = clean_text(result)
 
     # --------------------------------------------------------
-    # CHECK ENGLISH RESULT
+    # CHECK ENGLISH
     # --------------------------------------------------------
 
     if not english:
@@ -521,27 +667,24 @@ Return only the natural English sentence.
     print()
     print("================================")
     print("[LANGUAGE DEBUG]")
-    print("Natural English generated:")
+    print("Natural English:")
     print(repr(english))
+
     print(
         "English type:",
         type(english).__name__
     )
+
     print("================================")
 
     # ========================================================
-    # CRITICAL DEBUG POINT
-    # ========================================================
-    #
-    # This is the exact value being sent
-    # from Qwen -> Argos.
-    #
+    # ARGOS TRANSLATION
     # ========================================================
 
     print()
     print("================================")
     print("[LANGUAGE DEBUG]")
-    print("English being sent to Argos:")
+    print("Sending English to Argos:")
     print(repr(english))
 
     print("Target language:")
@@ -549,17 +692,13 @@ Return only the natural English sentence.
 
     print("================================")
 
-    # --------------------------------------------------------
-    # TRANSLATE ENGLISH -> TARGET LANGUAGE
-    # --------------------------------------------------------
-
     translated = translate_local(
         english,
         target_language
     )
 
     # ========================================================
-    # CRITICAL DEBUG POINT #2
+    # ARGOS RESULT
     # ========================================================
 
     print()
@@ -592,9 +731,9 @@ Return only the natural English sentence.
 
         return english, ""
 
-    # --------------------------------------------------------
-    # FINAL RESULTS
-    # --------------------------------------------------------
+    # ========================================================
+    # FINAL RESULT
+    # ========================================================
 
     print()
     print("================================")
@@ -603,7 +742,7 @@ Return only the natural English sentence.
     print(english)
 
     print()
-    print("Translated:")
+    print("Hindi:")
     print(translated)
 
     print("================================")
@@ -621,16 +760,10 @@ def translate(
 ):
     """
     Direct translation helper.
-
-    Example:
-
-        translate(
-            "Please pay attention.",
-            "Hindi"
-        )
     """
 
     if not text:
+
         return ""
 
     return translate_local(
@@ -651,10 +784,9 @@ if __name__ == "__main__":
     print("================================")
 
     test_words = [
-        "tomorrow",
         "you",
-        "come",
-        "college"
+        "name",
+        "what"
     ]
 
     english, translated = (
